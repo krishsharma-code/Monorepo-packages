@@ -10,6 +10,10 @@ on:
       - main
       - master
 
+# Least-privilege token scope for all jobs in this workflow.
+permissions:
+  contents: read
+
 # Cancel older runs for the same ref to save runner minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
