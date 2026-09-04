@@ -1,0 +1,97 @@
+name: Monorepo Package Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+# Least-privilege token scope for all jobs in this workflow.
+permissions:
+  contents: read
+
+# Cancel older runs for the same ref to save runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    name: Detect changed package folders
+    runs-on: ubuntu-latest
+    outputs:
+      shieldgate: ${{ steps.filter.outputs.shieldgate }}
+      form_armor: ${{ steps.filter.outputs.form_armor }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # We need enough history to diff the current revision against its base.
+          fetch-depth: 0
+
+      # Generic path-based filtering so downstream jobs only run when needed.
+      # Add more package keys under `filters` and mirror them in new jobs.
+      - name: Determine changed folders
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            shieldgate:
+              - 'shieldgate/**'
+            form_armor:
+              - 'form-armor/**'
+
+  test-shieldgate:
+    name: Test shieldgate (Python)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shieldgate == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shieldgate
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # If you later add pinned dependency files (requirements*.txt/pyproject.toml),
+      # install from them here before running tests.
+      - name: Install Python test dependencies
+        run: pip install pytest
+
+      - name: Run pytest
+        run: pytest
+
+  test-form-armor:
+    name: Test form-armor (Node.js)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.form_armor == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: form-armor
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          # Optional optimization for future growth; harmless if lockfile exists.
+          cache: npm
+          cache-dependency-path: form-armor/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
